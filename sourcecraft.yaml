@@ -230,7 +230,6 @@ parts:
       - SPD: 'opteed'
     override-build: |
       make PLAT=${PLAT} \
-        SPD=${SPD} \
         ZYNQMP_CONSOLE=${ZYNQMP_CONSOLE} \
         RESET_TO_BL31=${RESET_TO_BL31} \
         RESET_TO_BL2=${RESET_TO_BL2} \
@@ -252,38 +251,6 @@ parts:
         -o ${CRAFT_PART_INSTALL}/ubootefi.var
     prime:
       - -*
-  # optee-os:
-  #   plugin: nil
-  #   source: https://github.com/Xilinx/optee_os.git
-  #   source-type: git
-  #   source-tag: xlnx_rebase_v4.5.0_2025.1_update1
-  #   override-pull: |
-  #     craftctl default
-  #     curl https://storage.googleapis.com/git-repo-downloads/repo > /bin/repo && chmod a+x /bin/repo
-  #     repo init -u https://github.com/Xilinx/optee_manifest.git
-  #     cp ${CRAFT_PROJECT_DIR}/optee_zynqmp.xml .repo/manifests/
-  #     repo init -m optee_zynqmp.xml && repo sync -j$(nproc)
-  #   build-packages:
-  #     - python3-cryptography
-  #     - python3-pyelftools
-  #     - uuid-dev
-  #   build-environment:
-  #     - PLATFORM: zynqmp-zcu102
-  #     - CFG_ARM64_core: y
-  #     - CFG_RPMB_FS: n
-  #     - CFG_TEE_CORE_LOG_LEVEL: '4'
-  #     - CFG_TEE_TA_LOG_LEVEL: '4'
-  #     - CFG_UART_BASE: 'UART1_BASE'
-  #   override-build: |
-  #     cd build
-  #     make toolchains -j$(nproc)
-  #     make optee-os -j$(nproc)
-  #     install -D -m 0644 ${CRAFT_PART_BUILD}/optee_os/out/arm/core/tee.elf \
-  #                        ${CRAFT_PART_INSTALL}/blobs/tee.elf
-  #     install -D -m 0644 ${CRAFT_PART_BUILD}/optee_os/out/arm/core/tee-raw.bin \
-  #                        ${CRAFT_PART_INSTALL}/blobs/tee.bin
-  #   prime:
-  #     - -*
   u-boot:
     after:
       - efi
@@ -351,7 +318,6 @@ parts:
       - bootgen
       - fsbl
       - arm-trusted-firmware
-      # - optee-os
       - u-boot
       - pmu-firmware
     plugin: dump
