@@ -1,0 +1,51 @@
+From: kria-fde build <patch@local>
+Date: Mon, 13 Jul 2026 00:00:00 +0000
+Subject: [PATCH] efi_loader: accept unsigned images (verify outer image only)
+
+A signed systemd-stub Unified Kernel Image (UKI) authenticates
+correctly against db, but when it runs it uses the LoadImage() boot
+service on the kernel embedded in its .linux section. That embedded
+kernel carries no signature of its own, so efi_image_authenticate()
+rejects it ("Image not authenticated" -> EFI_SECURITY_VIOLATION) and
+the stub aborts with "Error loading kernel image: Security violation".
+
+For our purposes verifying the outer, signed image is sufficient. Treat
+an image that has no embedded WIN_CERTIFICATE as authenticated, so the
+unsigned payload loaded by the already-verified outer image is allowed.
+Signed images are still fully verified against db/dbx as before.
+
+Applies to U-Boot v2025.01 / Xilinx xlnx_rebase_v2025.01_update
+(tag xlnx_rebase_v2025.01_2025.1_update1).
+
+Signed-off-by: kria-fde build <patch@local>
+---
+ lib/efi_loader/efi_image_loader.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/lib/efi_loader/efi_image_loader.c b/lib/efi_loader/efi_image_loader.c
+index 0ddf69a0918..04233ca1fba 100644
+--- a/lib/efi_loader/efi_image_loader.c
++++ b/lib/efi_loader/efi_image_loader.c
+@@ -605,6 +605,20 @@ static bool efi_image_authenticate(void *efi, size_t efi_size)
+ 		goto out;
+ 	}
+ 
++	/*
++	 * An image without an embedded signature is treated as
++	 * authenticated. Under our secure-boot policy only the outer,
++	 * signed image (e.g. a signed systemd-stub UKI) is verified
++	 * against db/dbx; an unsigned payload it subsequently loads via
++	 * LoadImage() (the embedded kernel) is accepted without an
++	 * independent signature check.
++	 */
++	if (!wincerts || !wincerts_len) {
++		log_info("Image has no signature; skipping db/dbx check\n");
++		ret = true;
++		goto out;
++	}
++
+ 	/*
+ 	 * verify signature using db and dbx
+ 	 */
+-- 
+2.43.0

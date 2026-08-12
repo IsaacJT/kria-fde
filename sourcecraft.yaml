@@ -9,10 +9,13 @@ description: |
   store.
 platforms:
   arm64:
-    build-on:
-      - amd64
+    build-on: [amd64]
+    build-for: [arm64]
 # prebuilt bins: https://github.com/Xilinx/embpf-bootfw-update-tool/releases/tag/v3.0
 # following: https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18842156/Fetch+Sources
+package-repositories:
+  - type: apt
+    ppa: snappy-dev/image
 parts:
   microblaze-toolchain:
     plugin: nil
@@ -224,39 +227,52 @@ parts:
       - blobs/arm-trusted-firmware.elf
     prime:
       - -*
-  optee-os:
+  efi:
     plugin: nil
-    source: https://github.com/Xilinx/optee_os.git
-    source-type: git
-    source-tag: xlnx_rebase_v4.5.0_2025.1_update1
-    override-pull: |
-      craftctl default
-      curl https://storage.googleapis.com/git-repo-downloads/repo > /bin/repo && chmod a+x /bin/repo
-      repo init -u https://github.com/Xilinx/optee_manifest.git
-      cp ${CRAFT_PROJECT_DIR}/optee_zynqmp.xml .repo/manifests/
-      repo init -m optee_zynqmp.xml && repo sync -j$(nproc)
+    source: efi
     build-packages:
-      - python3-cryptography
-      - python3-pyelftools
-      - uuid-dev
-    build-environment:
-      - PLATFORM: zynqmp-zcu102
-      - CFG_ARM64_core: y
-      - CFG_RPMB_FS: n
-      - CFG_TEE_CORE_LOG_LEVEL: '4'
-      - CFG_TEE_TA_LOG_LEVEL: '4'
-      - CFG_UART_BASE: 'UART1_BASE'
+      - ubuntu-core-initramfs
     override-build: |
-      cd build
-      make toolchains -j$(nproc)
-      make optee-os -j$(nproc)
-      install -D -m 0644 ${CRAFT_PART_BUILD}/optee_os/out/arm/core/tee.elf \
-                         ${CRAFT_PART_INSTALL}/blobs/tee.elf
-      install -D -m 0644 ${CRAFT_PART_BUILD}/optee_os/out/arm/core/tee-raw.bin \
-                         ${CRAFT_PART_INSTALL}/blobs/tee.bin
+      python3 ${CRAFT_PART_SRC}/make_ubootefi_var.py \
+        --all /usr/lib/ubuntu-core-initramfs/snakeoil/PkKek-1-snakeoil.pem \
+        -o ${CRAFT_PART_INSTALL}/ubootefi.var
     prime:
       - -*
+  # optee-os:
+  #   plugin: nil
+  #   source: https://github.com/Xilinx/optee_os.git
+  #   source-type: git
+  #   source-tag: xlnx_rebase_v4.5.0_2025.1_update1
+  #   override-pull: |
+  #     craftctl default
+  #     curl https://storage.googleapis.com/git-repo-downloads/repo > /bin/repo && chmod a+x /bin/repo
+  #     repo init -u https://github.com/Xilinx/optee_manifest.git
+  #     cp ${CRAFT_PROJECT_DIR}/optee_zynqmp.xml .repo/manifests/
+  #     repo init -m optee_zynqmp.xml && repo sync -j$(nproc)
+  #   build-packages:
+  #     - python3-cryptography
+  #     - python3-pyelftools
+  #     - uuid-dev
+  #   build-environment:
+  #     - PLATFORM: zynqmp-zcu102
+  #     - CFG_ARM64_core: y
+  #     - CFG_RPMB_FS: n
+  #     - CFG_TEE_CORE_LOG_LEVEL: '4'
+  #     - CFG_TEE_TA_LOG_LEVEL: '4'
+  #     - CFG_UART_BASE: 'UART1_BASE'
+  #   override-build: |
+  #     cd build
+  #     make toolchains -j$(nproc)
+  #     make optee-os -j$(nproc)
+  #     install -D -m 0644 ${CRAFT_PART_BUILD}/optee_os/out/arm/core/tee.elf \
+  #                        ${CRAFT_PART_INSTALL}/blobs/tee.elf
+  #     install -D -m 0644 ${CRAFT_PART_BUILD}/optee_os/out/arm/core/tee-raw.bin \
+  #                        ${CRAFT_PART_INSTALL}/blobs/tee.bin
+  #   prime:
+  #     - -*
   u-boot:
+    after:
+      - efi
     plugin: nil
     source: https://github.com/Xilinx/u-boot-xlnx.git
     source-branch: xlnx_rebase_v2025.01_update
@@ -275,15 +291,32 @@ parts:
       - CROSS_COMPILE: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-'
       # k26 kv device tree
       - DEVICE_TREE: 'zynqmp-smk-k26-revA-sck-kv-g-revB'
+    override-pull: |
+      craftctl default
+      git apply ${CRAFT_PROJECT_DIR}/patches/0001-crypto-pkcs7_verify-drop-x509-signing-time-validity-check.patch
+      git apply ${CRAFT_PROJECT_DIR}/patches/0002-efi_loader-accept-unsigned-inner-images.patch
+      git apply ${CRAFT_PROJECT_DIR}/patches/9999-DEBUG-efi-auth-trace.patch
     override-build: |
       # Add custom version from snapcraft.yaml
       head=$(git rev-parse --verify --short HEAD 2> /dev/null)
       version=$(make ubootversion)
 
+      # Enable EFI secure boot
       make xilinx_zynqmp_kria_defconfig
+      ./scripts/config --enable CONFIG_EFI_SECURE_BOOT \
+        --enable CONFIG_FIT_SIGNATURE \
+        --enable CONFIG_EFI_VARIABLE_NO_STORE \
+        --disable CONFIG_EFI_VARIABLE_FILE_STORE \
+        --enable CONFIG_EFI_VARIABLES_PRESEED \
+        --disable CONFIG_TPM_V1
+      make olddefconfig
+
+      # Copy certificate variables
+      cp ${CRAFT_STAGE}/ubootefi.var ${CRAFT_PART_BUILD}/
+
       # Set custom version directly via LOCALVERSION
       make DEVICE_TREE=${DEVICE_TREE} \
-           LOCALVERSION="-snap-${CRAFT_PROJECT_VERSION}[tchavadar]" \
+           LOCALVERSION="-snap-${CRAFT_PROJECT_VERSION}[efi]" \
            -j$(nproc)
       install -D -m 0644 u-boot.elf ${CRAFT_PART_INSTALL}/blobs/u-boot.elf
     prime:
@@ -304,7 +337,7 @@ parts:
       - bootgen
       - fsbl
       - arm-trusted-firmware
-      - optee-os
+      # - optee-os
       - u-boot
       - pmu-firmware
     plugin: dump

@@ -1,0 +1,68 @@
+diff --git a/lib/efi_loader/efi_image_loader.c b/lib/efi_loader/efi_image_loader.c
+index 0ddf69a0918..1e4e5a367c6 100644
+--- a/lib/efi_loader/efi_image_loader.c
++++ b/lib/efi_loader/efi_image_loader.c
+@@ -621,7 +621,7 @@ static bool efi_image_authenticate(void *efi, size_t efi_size)
+ 	}
+ 
+ 	if (efi_signature_lookup_digest(regs, dbx, true)) {
+-		log_debug("Image's digest was found in \"dbx\"\n");
++		printf("EFI-AUTH: image digest found in dbx -> reject\n");
+ 		goto out;
+ 	}
+ 
+@@ -635,6 +635,8 @@ static bool efi_image_authenticate(void *efi, size_t efi_size)
+ 	 *   - unless signature is rejected explicitly with its digest.
+ 	 */
+ 
++	printf("EFI-AUTH: enter loop, wincerts_len=%zu db=%p dbx=%p\n",
++	       wincerts_len, db, dbx);
+ 	for (wincert = wincerts, wincerts_end = (u8 *)wincerts + wincerts_len;
+ 	     (u8 *)wincert < wincerts_end;
+ 	     wincert = (WIN_CERTIFICATE *)
+@@ -710,19 +712,19 @@ static bool efi_image_authenticate(void *efi, size_t efi_size)
+ 		/* try black-list first */
+ 		if (efi_signature_verify_one(regs, msg, dbx)) {
+ 			ret = false;
+-			log_debug("Signature was rejected by \"dbx\"\n");
++			printf("EFI-AUTH: signature rejected by dbx (verify_one)\n");
+ 			goto out;
+ 		}
+ 
+ 		if (!efi_signature_check_signers(msg, dbx)) {
+ 			ret = false;
+-			log_debug("Signer(s) in \"dbx\"\n");
++			printf("EFI-AUTH: signer(s) found in dbx -> reject\n");
+ 			goto out;
+ 		}
+ 
+ 		/* try white-list */
+ 		if (!efi_signature_verify(regs, msg, db, dbx)) {
+-			log_debug("Signature was not verified by \"db\"\n");
++			printf("EFI-AUTH: not verified by db\n");
+ 			continue;
+ 		}
+ 
+@@ -731,11 +733,12 @@ static bool efi_image_authenticate(void *efi, size_t efi_size)
+ 		 * a messaged digest embedded in pkcs7's contentInfo
+ 		 */
+ 		if (efi_image_verify_digest(regs, msg)) {
++			printf("EFI-AUTH: verified OK by db\n");
+ 			ret = true;
+ 			continue;
+ 		}
+ 
+-		log_debug("Message digest doesn't match\n");
++		printf("EFI-AUTH: message digest mismatch\n");
+ 	}
+ 
+ 	/* last resort try the image sha256 hash in db */
+diff --git a/lib/efi_loader/efi_signature.c b/lib/efi_loader/efi_signature.c
+index 184eac8cddb..196be4a8723 100644
+--- a/lib/efi_loader/efi_signature.c
++++ b/lib/efi_loader/efi_signature.c
+@@ -1,3 +1,4 @@
++#define DEBUG
+ // SPDX-License-Identifier: GPL-2.0+
+ /*
+  * Copyright (c) 2018 Patrick Wildt <patrick@blueri.se>
