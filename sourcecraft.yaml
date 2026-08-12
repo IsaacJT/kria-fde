@@ -163,8 +163,6 @@ parts:
       - PATH: '${CRAFT_STAGE}/microblaze-toolchain/bin:${PATH}'
       - MB_GNU: '${CRAFT_STAGE}/microblaze-toolchain'
     override-build: |
-      # TODO: skip pmu-firmware build for now
-      exit 0
       # Find the actual MicroBlaze compiler
       MB_COMPILER=$(find ${CRAFT_STAGE}/microblaze-toolchain/bin -name "microblaze*-gcc" | head -1)
       if [ -z "$MB_COMPILER" ]; then
@@ -185,16 +183,15 @@ parts:
       # Clean any previous builds
       make clean || true
 
-      # Find the sysroot for the toolchain
-      SYSROOT="${CRAFT_STAGE}/microblaze-toolchain/${MB_PREFIX}/sysroot"
-      if [ ! -d "$SYSROOT" ]; then
-        # Try alternate location
-        SYSROOT="${CRAFT_STAGE}/microblaze-toolchain/sysroot"
-      fi
+      # crosstool-NG installs a single self-contained toolchain prefix, with
+      # the newlib sysroot living at <prefix>/<target-triplet> (e.g.
+      # microblazeel-xilinx-elf), unlike Buildroot's separate host/staging
+      # split - so there's no need to guess between multiple locations here.
+      SYSROOT="${CRAFT_STAGE}/microblaze-toolchain/${MB_PREFIX}"
 
       echo "Using sysroot: $SYSROOT"
 
-      # Build with our buildroot toolchain using full names and proper sysroot
+      # Build with our crosstool-NG toolchain using full names and proper sysroot
       make COMPILER=${MB_PREFIX}-gcc \
            ARCHIVER=${MB_PREFIX}-ar \
            CC=${MB_PREFIX}-gcc \
@@ -210,8 +207,8 @@ parts:
       # Install the firmware
       install -D -m 0644 executable.elf ${CRAFT_PART_INSTALL}/blobs/pmufw.elf
       echo "PMU firmware built and installed successfully"
-    # stage:
-    #   - blobs/pmufw.elf
+    stage:
+      - blobs/pmufw.elf
     prime:
       - -*
   arm-trusted-firmware:
