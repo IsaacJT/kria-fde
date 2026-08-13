@@ -245,9 +245,30 @@ parts:
     source: efi
     build-packages:
       - ubuntu-core-initramfs
+      # Ships /usr/share/grub/canonical-uefi-ca.crt, the "Canonical Ltd.
+      # Master Certificate Authority" cert used to sign grub/the kernel.
+      - grub2-common
+      - curl
     override-build: |
+      # Besides the snakeoil dev cert (used as PK/KEK, i.e. this device's own
+      # trust root), also add to db:
+      #   - Microsoft's "Microsoft Corporation UEFI CA 2011" cert, needed to
+      #     verify/trust Canonical's shim-signed shim.efi, which is signed by
+      #     Microsoft.
+      #   - Canonical's "Canonical Ltd. Master Certificate Authority" root
+      #     cert (issuer of Canonical's signing certs), which shim uses (as
+      #     its embedded vendor cert / via db) to verify grub and the kernel
+      #     it chainloads.
+      curl -fsSL -o ms-uefi-ca-2011.crt \
+        https://www.microsoft.com/pkiops/certs/MicCorUEFCA2011_2011-06-27.crt
+
+      # Also pre-seed an empty dbx (forbidden signatures database) so it's
+      # present rather than absent/unset.
       python3 ${CRAFT_PART_SRC}/make_ubootefi_var.py \
         --all /usr/lib/ubuntu-core-initramfs/snakeoil/PkKek-1-snakeoil.pem \
+        --db ms-uefi-ca-2011.crt \
+        --db /usr/share/grub/canonical-uefi-ca.crt \
+        --seed-dbx \
         -o ${CRAFT_PART_INSTALL}/ubootefi.var
     prime:
       - -*
