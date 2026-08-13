@@ -307,8 +307,8 @@ parts:
       make xilinx_zynqmp_kria_defconfig
       ./scripts/config --enable CONFIG_EFI_SECURE_BOOT \
         --enable CONFIG_FIT_SIGNATURE \
-        --enable CONFIG_EFI_VARIABLE_NO_STORE \
-        --disable CONFIG_EFI_VARIABLE_FILE_STORE \
+        --disable CONFIG_EFI_VARIABLE_NO_STORE \
+        --enable CONFIG_EFI_VARIABLE_FILE_STORE \
         --enable CONFIG_EFI_VARIABLES_PRESEED \
         --disable CONFIG_TPM_V1
       make olddefconfig
