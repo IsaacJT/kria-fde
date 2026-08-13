@@ -170,6 +170,12 @@ def main() -> int:
         help="Pre-built EFI Signature List (ESL) to store verbatim as dbx",
     )
     p.add_argument(
+        "--seed-dbx",
+        action="store_true",
+        help="Seed a dbx variable even if no --dbx-hash/--dbx-esl were given, "
+        "producing an empty (but present) forbidden-signatures database",
+    )
+    p.add_argument(
         "--owner",
         type=uuid.UUID,
         default=uuid.UUID("11111111-2222-3333-4444-555555555555"),
@@ -213,13 +219,13 @@ def main() -> int:
         dbx += esl_sha256(args.dbx_hash, args.owner)
     if args.dbx_esl:
         dbx += open(args.dbx_esl, "rb").read()
-    if dbx:
+    if dbx or args.seed_dbx:
         blob += make_entry("dbx", IMAGE_SECURITY_DB_GUID, AUTH_ATTR, dbx)
 
     if not blob:
         p.error(
             "nothing to do: supply at least one of "
-            "--all/--pk/--kek/--db/--dbx-hash/--dbx-esl"
+            "--all/--pk/--kek/--db/--dbx-hash/--dbx-esl/--seed-dbx"
         )
 
     with open(args.output, "wb") as f:
