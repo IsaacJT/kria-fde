@@ -256,9 +256,13 @@ parts:
       #     verify/trust Canonical's shim-signed shim.efi, which is signed by
       #     Microsoft.
       #   - Canonical's "Canonical Ltd. Master Certificate Authority" root
-      #     cert (issuer of Canonical's signing certs), which shim uses (as
-      #     its embedded vendor cert / via db) to verify grub and the kernel
-      #     it chainloads.
+      #     cert (issuer of Canonical's signing certs).
+      #   - Canonical's "Canonical Ltd. Secure Boot Signing (2022 v1)" cert,
+      #     the current leaf cert Canonical actually signs grub/the kernel
+      #     with (issued by the Master CA above). This isn't published as a
+      #     standalone download; it was extracted from the PKCS#7 signature
+      #     on a Canonical-signed grubaa64.efi.signed binary and is checked
+      #     into efi/canonical-secure-boot-signing-2022-v1.crt.
       curl -fsSL -o ms-uefi-ca-2011.crt \
         https://www.microsoft.com/pkiops/certs/MicCorUEFCA2011_2011-06-27.crt
 
@@ -268,6 +272,7 @@ parts:
         --all /usr/lib/ubuntu-core-initramfs/snakeoil/PkKek-1-snakeoil.pem \
         --db ms-uefi-ca-2011.crt \
         --db /usr/share/grub/canonical-uefi-ca.crt \
+        --db ${CRAFT_PART_SRC}/canonical-secure-boot-signing-2022-v1.crt \
         --seed-dbx \
         -o ${CRAFT_PART_INSTALL}/ubootefi.var
     prime:
