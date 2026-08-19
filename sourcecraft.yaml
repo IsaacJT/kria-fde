@@ -12,6 +12,7 @@ platforms:
   arm64:
     build-on:
       - amd64
+      - arm64
 parts:
   # The only prebuilt MicroBlaze toolchain available is bundled with
   # Vivado/Petalinux, which we can't redistribute.
