@@ -1,6 +1,6 @@
 name: kria-fde # you probably want to 'snapcraft register <name>'
 base: ubuntu@24.04 # the base snap is the execution environment for this snap
-version: '2025.1' # just for humans, typically '1.2+git' or '1.3.2'
+version: "2025.1" # just for humans, typically '1.2+git' or '1.3.2'
 summary: Single-line elevator pitch for your amazing snap # 79 char long summary
 description: |
   This is my-snap's description. You have a paragraph or two to tell the
@@ -11,22 +11,8 @@ platforms:
   arm64:
     build-on:
       - amd64
-# prebuilt bins: https://github.com/Xilinx/embpf-bootfw-update-tool/releases/tag/v3.0
-# following: https://xilinx-wiki.atlassian.net/wiki/spaces/A/pages/18842156/Fetch+Sources
 parts:
   microblaze-toolchain:
-    # Builds a MicroBlaze little-endian bare-metal (newlib) GCC toolchain
-    # using crosstool-NG. crosstool-NG produces one self-contained,
-    # relocatable toolchain prefix (bin/, <target>/include, <target>/lib),
-    # unlike Buildroot which splits host tools and the newlib sysroot across
-    # output/host and output/staging - the latter was never being copied,
-    # which is why pmu-firmware's build used to fail with missing headers
-    # like reent.h.
-    #
-    # Note: crosstool-NG marks MicroBlaze support as EXPERIMENTAL and does
-    # not ship a maintained sample config for it, so the target is
-    # configured here from scratch (mirroring the minimal fragments used by
-    # crosstool-NG's own samples) rather than via `ct-ng <sample>`.
     plugin: nil
     source: https://github.com/crosstool-ng/crosstool-ng.git
     source-type: git
@@ -57,7 +43,7 @@ parts:
     override-build: |
       ./bootstrap
       ./configure --enable-local
-      make -j$(nproc)
+      make -j
 
       cat > .config << EOF
       CT_CONFIG_VERSION="4"
@@ -110,47 +96,21 @@ parts:
     prime:
       - -*
   ###################### END OF TOOLCHAIN SETUP ###############################
-  blobs:
-    plugin: dump
-    source: .
-    build-packages:
-      - xxd
-    override-build: |
-      mkdir -p ${CRAFT_PART_INSTALL}/prebuilt
-      mkdir -p ${CRAFT_PART_INSTALL}/blobs
-      cp extras/bins/* ${CRAFT_PART_INSTALL}/prebuilt/
-      echo "${CRAFT_PROJECT_VERSION}-$(git describe --always)-snap" | xxd -p > ${CRAFT_PART_INSTALL}/blobs/bootbin-version-header.txt
-    prime:
-      - -*
   fsbl:
     after:
       - arm-toolchain
     plugin: nil
     source: https://github.com/Xilinx/embeddedsw.git
-    source-tag: xilinx_v2025.1_update1
+    source-branch: xlnx_rel_v2026.1.1
     build-environment:
-      - PATH: '${CRAFT_STAGE}/bin:${PATH}'
-      - PROC: 'a53'
-      - BOARD: 'som'
-      - A53_STATE: '64'
+      - PATH: "${CRAFT_STAGE}/bin:${PATH}"
     override-build: |
-      # Copy psu_init files to som directory
-      cp ${CRAFT_PROJECT_DIR}/extras/psu_init.c lib/sw_apps/zynqmp_fsbl/misc/som/
-      cp ${CRAFT_PROJECT_DIR}/extras/psu_init.h lib/sw_apps/zynqmp_fsbl/misc/som/
-
-      # Switch to traditional make build as CMake seems to have issues
       cd lib/sw_apps/zynqmp_fsbl/src/
-
       make clean
-      make BOARD=som \
-           CROSS_COMPILE=aarch64-none-elf- \
-           CFLAGS+=-DFSBL_DEBUG_INFO \
-           -j$(nproc)
+      make BOARD=som PROC=a53 A53_STATE=64 -j1
 
       # Install the built FSBL
-      install -D -m 0644 fsbl.elf ${CRAFT_PART_INSTALL}/blobs/fsbl.elf
-    stage:
-      - blobs/fsbl.elf
+      install -Dm0644 fsbl.elf -t ${CRAFT_PART_INSTALL}/blobs
     prime:
       - -*
   pmu-firmware:
@@ -158,10 +118,10 @@ parts:
       - microblaze-toolchain
     plugin: nil
     source: https://github.com/Xilinx/embeddedsw.git
-    source-tag: xilinx_v2025.1_update1
+    source-tag: xilinx_v2026.1
     build-environment:
-      - PATH: '${CRAFT_STAGE}/microblaze-toolchain/bin:${PATH}'
-      - MB_GNU: '${CRAFT_STAGE}/microblaze-toolchain'
+      - PATH: "${CRAFT_STAGE}/microblaze-toolchain/bin:${PATH}"
+      - MB_GNU: "${CRAFT_STAGE}/microblaze-toolchain"
     override-build: |
       # Find the actual MicroBlaze compiler
       MB_COMPILER=$(find ${CRAFT_STAGE}/microblaze-toolchain/bin -name "microblaze*-gcc" | head -1)
@@ -196,7 +156,7 @@ parts:
            ARCHIVER=${MB_PREFIX}-ar \
            CC=${MB_PREFIX}-gcc \
            CFLAGS="-Os -flto --sysroot=${SYSROOT}" \
-           -j$(nproc)
+           -j
 
       # Verify the build output
       if [ ! -f executable.elf ]; then
@@ -207,24 +167,22 @@ parts:
       # Install the firmware
       install -D -m 0644 executable.elf ${CRAFT_PART_INSTALL}/blobs/pmufw.elf
       echo "PMU firmware built and installed successfully"
-    stage:
-      - blobs/pmufw.elf
     prime:
       - -*
   arm-trusted-firmware:
     plugin: nil
     source: https://github.com/Xilinx/arm-trusted-firmware.git
     source-type: git
-    source-tag: xlnx_rebase_v2.12_2025.1
+    source-tag: xlnx-rebase-v2.14_2026.1
     build-packages:
       - crossbuild-essential-arm64
     build-environment:
-      - PLAT: 'zynqmp'
-      - RESET_TO_BL31: '1'
-      - RESET_TO_BL2: '0'
-      - ZYNQMP_CONSOLE: 'cadence1'
-      - PRELOADED_BL33_BASE: '0x8000000'
-      - SPD: 'opteed'
+      - PLAT: "zynqmp"
+      - RESET_TO_BL31: "1"
+      - RESET_TO_BL2: "0"
+      - ZYNQMP_CONSOLE: "cadence1"
+      - PRELOADED_BL33_BASE: "0x8000000"
+      - SPD: "opteed"
     override-build: |
       make PLAT=${PLAT} \
         SPD=${SPD} \
@@ -232,48 +190,56 @@ parts:
         RESET_TO_BL31=${RESET_TO_BL31} \
         RESET_TO_BL2=${RESET_TO_BL2} \
         PRELOADED_BL33_BASE=${PRELOADED_BL33_BASE} \
-        bl31 -j$(nproc)
-      install -D -m 0644 build/${PLAT}/release/bl31/bl31.elf ${CRAFT_PART_INSTALL}/blobs/arm-trusted-firmware.elf
-    stage:
-      - blobs/arm-trusted-firmware.elf
+        bl31 -j
+      install -Dm0644 build/${PLAT}/release/bl31/bl31.elf \
+        ${CRAFT_PART_INSTALL}/blobs/arm-trusted-firmware.elf
+    prime:
+      - -*
+  optee-uc-fde:
+    plugin: dump
+    source: https://github.com/canonical/optee-uc-fde.git
+    source-type: git
+    source-branch: master
+    organize:
+      '*': optee-fde/
     prime:
       - -*
   optee-os:
     plugin: nil
     source: https://github.com/Xilinx/optee_os.git
     source-type: git
-    source-tag: xlnx_rebase_v4.5.0_2025.1_update1
-    override-pull: |
-      craftctl default
-      curl https://storage.googleapis.com/git-repo-downloads/repo > /bin/repo && chmod a+x /bin/repo
-      repo init -u https://github.com/Xilinx/optee_manifest.git
-      cp ${CRAFT_PROJECT_DIR}/optee_zynqmp.xml .repo/manifests/
-      repo init -m optee_zynqmp.xml && repo sync -j$(nproc)
+    source-tag: xlnx-rebase-v4.9.0_2026.1
+    after:
+      - optee-uc-fde
     build-packages:
       - python3-cryptography
       - python3-pyelftools
       - uuid-dev
+      - gcc-arm-linux-gnueabihf
+      - gcc-${CRAFT_ARCH_TRIPLET_BUILD_FOR}
     build-environment:
-      - PLATFORM: zynqmp-zcu102
+      - PLATFORM: zynqmp-kr260
       - CFG_ARM64_core: y
       - CFG_RPMB_FS: n
-      - CFG_TEE_CORE_LOG_LEVEL: '4'
-      - CFG_TEE_TA_LOG_LEVEL: '4'
-      - CFG_UART_BASE: 'UART1_BASE'
+      - CFG_USER_TA_TARGETS: "ta_arm64"
+      - CFG_EARLY_TA: "y"
+      - CFG_IN_TREE_EARLY_TAS: "fde_key_handler/fd1b2a86-3668-11eb-adc1-0242ac120002 pkcs11/fd02c9da-306c-48c7-a49c-bbd827ae86ee"
+      # The default memory regions are huge (256 MiB) on ZynqMP; set them to a more reasonable size
+      - CFG_TZDRAM_START: "0x60000000"
+      - CFG_TZDRAM_SIZE: "0x02000000"
+      - CFG_SHMEM_START: "0x62000000"
+      - CFG_SHMEM_SIZE: "0x00400000"
     override-build: |
-      cd build
-      make toolchains -j$(nproc)
-      make optee-os -j$(nproc)
-      install -D -m 0644 ${CRAFT_PART_BUILD}/optee_os/out/arm/core/tee.elf \
-                         ${CRAFT_PART_INSTALL}/blobs/tee.elf
-      install -D -m 0644 ${CRAFT_PART_BUILD}/optee_os/out/arm/core/tee-raw.bin \
+      cp -r ${CRAFT_STAGE}/optee-fde/ta/fde_key_handler ${CRAFT_PART_BUILD}/ta/
+      make -j
+      install -Dm0644 ${CRAFT_PART_BUILD}/out/arm-plat-zynqmp/core/tee-raw.bin \
                          ${CRAFT_PART_INSTALL}/blobs/tee.bin
     prime:
       - -*
   u-boot:
     plugin: nil
     source: https://github.com/Xilinx/u-boot-xlnx.git
-    source-branch: xlnx_rebase_v2025.01_update
+    source-branch: xlnx_rebase_v2026.01
     source-type: git
     build-packages:
       - crossbuild-essential-arm64
@@ -283,51 +249,42 @@ parts:
       - swig
       - libgnutls28-dev
       - libssl-dev
+      - uuid-dev
       - device-tree-compiler
     build-environment:
-      - ARCH: 'arm64'
-      - CROSS_COMPILE: '${CRAFT_ARCH_TRIPLET_BUILD_FOR}-'
-      # k26 kv device tree
-      - DEVICE_TREE: 'zynqmp-smk-k26-revA-sck-kv-g-revB'
+      - ARCH: "arm"
+      - CROSS_COMPILE: "${CRAFT_ARCH_TRIPLET_BUILD_FOR}-"
+      - DEVICE_TREE: "zynqmp-smk-k26-revA-sck-kr-g-revB"
     override-build: |
-      # Add custom version from snapcraft.yaml
-      head=$(git rev-parse --verify --short HEAD 2> /dev/null)
-      version=$(make ubootversion)
-
       make xilinx_zynqmp_kria_defconfig
-      # Set custom version directly via LOCALVERSION
       make DEVICE_TREE=${DEVICE_TREE} \
-           LOCALVERSION="-snap-${CRAFT_PROJECT_VERSION}[tchavadar]" \
-           -j$(nproc)
-      install -D -m 0644 u-boot.elf ${CRAFT_PART_INSTALL}/blobs/u-boot.elf
+           LOCALVERSION="-snap-${CRAFT_PROJECT_VERSION}[itrue]" \
+           -j u-boot.elf u-boot.dtb
+      install -Dm0644 u-boot.elf u-boot.dtb -t ${CRAFT_PART_INSTALL}/blobs
     prime:
       - -*
   bootgen:
     plugin: nil
     source: https://github.com/Xilinx/bootgen.git
     source-type: git
-    source-branch: xlnx_rel_v2025.1
+    source-branch: xlnx_rel_v2026.1
     override-build: |
-      make
-      cp build/bin/bootgen $CRAFT_PART_INSTALL/bootgen
+      make -j
+      install -Dm0755 build/bin/bootgen -t ${CRAFT_PART_INSTALL}
     prime:
       - -*
   boot-bin:
     after:
-      - blobs
       - bootgen
       - fsbl
       - arm-trusted-firmware
       - optee-os
       - u-boot
       - pmu-firmware
-    plugin: dump
-    source: .
-    build-environment:
-      - ARCH: 'zynqmp'
+    plugin: nil
+    source: bootgen
     override-build: |
-      cp bootgen.bif ${CRAFT_STAGE}/
-      cd ${CRAFT_STAGE}
-      ./bootgen -w -image bootgen.bif -arch ${ARCH} -o ${CRAFT_PART_INSTALL}/BOOT.bin
+      cp ${CRAFT_STAGE}/blobs/* ${CRAFT_PART_BUILD}/
+      ${CRAFT_STAGE}/bootgen -w -image bootgen.bif -arch zynqmp -o ${CRAFT_PART_INSTALL}/BOOT.bin
     prime:
       - BOOT.bin
