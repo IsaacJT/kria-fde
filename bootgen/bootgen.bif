@@ -6,4 +6,5 @@ the_ROM_image:
     [destination_cpu=a53-0, load=0x60000000, startup=0x60000000, exception_level = el-1, trustzone] tee.bin
     [destination_cpu=a53-0, load=0x100000] u-boot.dtb
     [destination_cpu=a53-0, exception_level=el-2] u-boot.elf
+    [udf_bh] boot-bin-version-header.txt
 }

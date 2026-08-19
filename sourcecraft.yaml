@@ -273,6 +273,17 @@ parts:
       install -Dm0755 build/bin/bootgen -t ${CRAFT_PART_INSTALL}
     prime:
       - -*
+  boot-bin-version-header:
+    plugin: nil
+    build-packages:
+      - git
+      - xxd
+    override-build: |
+      echo "${CRAFT_PROJECT_VERSION}-$(git -C ${CRAFT_PROJECT_DIR} describe --always)-snap" | \
+        xxd -p > boot-bin-version-header.txt
+      install -Dm0644 boot-bin-version-header.txt -t ${CRAFT_PART_INSTALL}/blobs
+    prime:
+      - -*
   boot-bin:
     after:
       - bootgen
